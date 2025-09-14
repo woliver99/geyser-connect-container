@@ -131,7 +131,6 @@ check_geyser_standalone() {
     echo "Checking for Geyser-Standalone updates..."
     local local_build=$(get_local_version "$VERSION_FILE" "geyser_standalone")
     local api_response
-    # Use -f (fail silently on server errors) which is better for scripting
     api_response=$(curl -sfL "$GEYSER_API_URL")
 
     # If the API response is empty, skip this check
@@ -191,7 +190,7 @@ check_mcxbox_broadcast() {
     echo "Checking for MCXboxBroadcast updates..."
     local local_version=$(get_local_version "$VERSION_FILE" "mcxbox_broadcast")
     local api_response
-    api_response=$(curl -sfL "$MC_XBOX_BROADCAST_API_URL")
+    api_response=$(curl -sf "$MC_XBOX_BROADCAST_API_URL")
     
     if [ -z "$api_response" ]; then
         echo "Warning: Failed to get API response for MCXboxBroadcast. This could be a DNS or network issue inside the container."
@@ -202,16 +201,21 @@ check_mcxbox_broadcast() {
 
     if [ "$remote_version" != "$local_version" ]; then
         echo "New MCXboxBroadcast version found: $remote_version"
-        # FIX: Be specific and only select the 'Extension' jar to avoid multiple URLs.
-        local download_url=$(echo "$api_response" | jq -r '.assets[] | select(.name == "MCXboxBroadcastExtension.jar") | .browser_download_url')
+        # Select the correct asset object once to be more efficient
+        local asset_json=$(echo "$api_response" | jq -r '.assets[] | select(.name == "MCXboxBroadcastExtension.jar")')
 
-        if [ -z "$download_url" ]; then
-            echo "Error: Could not find a .jar download URL for MCXboxBroadcast."
+        if [ -z "$asset_json" ]; then
+            echo "Error: Could not find the MCXboxBroadcastExtension.jar asset in the API response."
             return 1
         fi
+
+        local download_url=$(echo "$asset_json" | jq -r '.browser_download_url')
+        local sha256_digest=$(echo "$asset_json" | jq -r '.digest')
+        # Strip the 'sha256:' prefix from the digest string
+        local sha256_hash="${sha256_digest#sha256:}"
         
-        # GitHub API doesn't provide a checksum, so we pass an empty string
-        if download_and_verify "$download_url" "$MC_XBOX_BROADCAST_LOCATION" ""; then
+        # Pass the extracted checksum to the verification function
+        if download_and_verify "$download_url" "$MC_XBOX_BROADCAST_LOCATION" "$sha256_hash"; then
             update_local_version "$VERSION_FILE" "mcxbox_broadcast" "$remote_version"
             return 0 # Indicates an update was made
         fi
@@ -311,4 +315,5 @@ trap 'stop_server; echo "Script exiting."; exit 0' SIGINT SIGTERM
 
 # Run the main function
 main
+
 
