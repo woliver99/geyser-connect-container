@@ -98,7 +98,8 @@ download_and_verify() {
     mkdir -p "$(dirname "$destination")"
 
     echo "Downloading from $url..."
-    if ! curl -L -o "$temp_dest" "$url"; then
+    # Use --fail to make curl exit with an error code on HTTP errors (like 404)
+    if ! curl --fail -L -o "$temp_dest" "$url"; then
         echo "Error: Download failed for $url."
         rm -f "$temp_dest"
         return 1
@@ -130,11 +131,12 @@ check_geyser_standalone() {
     echo "Checking for Geyser-Standalone updates..."
     local local_build=$(get_local_version "$VERSION_FILE" "geyser_standalone")
     local api_response
-    api_response=$(curl -s "$GEYSER_API_URL")
+    # Use -f (fail silently on server errors) which is better for scripting
+    api_response=$(curl -sfL "$GEYSER_API_URL")
 
     # If the API response is empty, skip this check
     if [ -z "$api_response" ]; then
-        echo "Warning: Failed to get API response for Geyser-Standalone."
+        echo "Warning: Failed to get API response for Geyser-Standalone. This could be a DNS or network issue inside the container."
         return 1
     fi
 
@@ -160,10 +162,10 @@ check_geyser_connect() {
     echo "Checking for GeyserConnect updates..."
     local local_build=$(get_local_version "$VERSION_FILE" "geyser_connect")
     local api_response
-    api_response=$(curl -s "$GEYSER_CONNECT_API_URL")
+    api_response=$(curl -sfL "$GEYSER_CONNECT_API_URL")
 
     if [ -z "$api_response" ]; then
-        echo "Warning: Failed to get API response for GeyserConnect."
+        echo "Warning: Failed to get API response for GeyserConnect. This could be a DNS or network issue inside the container."
         return 1
     fi
 
@@ -189,10 +191,10 @@ check_mcxbox_broadcast() {
     echo "Checking for MCXboxBroadcast updates..."
     local local_version=$(get_local_version "$VERSION_FILE" "mcxbox_broadcast")
     local api_response
-    api_response=$(curl -s "$MC_XBOX_BROADCAST_API_URL")
+    api_response=$(curl -sfL "$MC_XBOX_BROADCAST_API_URL")
     
     if [ -z "$api_response" ]; then
-        echo "Warning: Failed to get API response for MCXboxBroadcast."
+        echo "Warning: Failed to get API response for MCXboxBroadcast. This could be a DNS or network issue inside the container."
         return 1
     fi
 
@@ -243,7 +245,15 @@ stop_server() {
         wait "$GEYSER_PID" 2>/dev/null
         echo "Server stopped."
     else
-        echo "Server is not running or PID is unknown."
+        # Find any running geyser process and stop it, in case the PID was lost
+        local pids=$(pgrep -f "Geyser-Standalone.jar")
+        if [ -n "$pids" ]; then
+            echo "Found orphaned server process(es). Stopping now..."
+            kill "$pids"
+            sleep 2
+        else
+            echo "Server is not running or PID is unknown."
+        fi
     fi
 }
 
@@ -301,5 +311,4 @@ trap 'stop_server; echo "Script exiting."; exit 0' SIGINT SIGTERM
 
 # Run the main function
 main
-
 
