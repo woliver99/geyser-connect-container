@@ -1,0 +1,10 @@
+services:
+  geyser-connect:
+    image: ghcr.io/woliver99/geyser-connect-container:main
+    container_name: geyser-connect-container
+    restart: unless-stopped
+    user: "1000:1000" # Recommended for security
+    ports:
+      - "19132:19132/udp"
+    volumes:
+      - ./geyser-data:/data
