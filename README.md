@@ -1,2 +1,2 @@
-# geyser-connect-docker
+# geyser-connect-container
 A simple container to host Geyser Standalone + Geyser Connect + MCXboxBroadcastExtension easily
